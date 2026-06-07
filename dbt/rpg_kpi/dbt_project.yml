@@ -1,0 +1,35 @@
+name: "rpg_kpi"
+version: "1.0.0"
+config-version: 2
+
+profile: "rpg_kpi"
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# Default request parameters. Overridden from the CLI via --vars
+# (run_pipeline.py passes hotel_id / from_date / to_date through to dbt).
+vars:
+  hotel_id: "1035"
+  from_date: "2026-05-01"
+  to_date: "2026-05-31"
+
+models:
+  rpg_kpi:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: view
+    marts:
+      +materialized: table
+
+seeds:
+  rpg_kpi:
+    hotel_room_inventory:
+      +column_types:
+        hotel_id: varchar
+        room_type_id: varchar
+        quantity: integer

@@ -1,0 +1,11 @@
+# Local DuckDB profile. The database file is created by the EL step
+# (pipeline/extract.py) and then transformed by dbt. Path is relative to
+# this profiles.yml directory so the project is runnable from anywhere.
+rpg_kpi:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('RPG_DUCKDB_PATH', 'rpg.duckdb') }}"
+      schema: main
+      threads: 4
