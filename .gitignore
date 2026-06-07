@@ -17,3 +17,6 @@ logs/
 # Note: data/ and output/ ARE committed on purpose —
 # the input data makes the pipeline reproducible, and the pre-generated
 # output CSV is part of the required deliverable.
+
+# dbt anonymous usage stamp
+dbt/rpg_kpi/.user.yml
