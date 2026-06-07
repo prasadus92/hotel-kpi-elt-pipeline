@@ -1,0 +1,7 @@
+# Development dependencies: linting and testing.
+-r requirements.txt
+
+ruff==0.15.16
+sqlfluff==4.2.2
+sqlfluff-templater-dbt==4.2.2
+pytest==9.0.3

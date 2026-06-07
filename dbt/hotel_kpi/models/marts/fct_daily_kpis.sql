@@ -36,7 +36,7 @@ aggregated as (
         hotel_id,
         night,
         sum(case when counts_for_occupancy then 1 else 0 end) as occupied_rooms,
-        sum(total_net_revenue)                                as total_net_revenue
+        sum(total_net_revenue) as total_net_revenue
     from reservation_nights
     group by hotel_id, night
 
@@ -47,11 +47,11 @@ select
     a.night,
     a.occupied_rooms,
     c.total_rooms,
-    round(a.occupied_rooms * 100.0 / nullif(c.total_rooms, 0), 2)        as occupancy_percentage,
-    round(a.total_net_revenue, 2)                                        as total_net_revenue,
+    round(a.occupied_rooms * 100.0 / nullif(c.total_rooms, 0), 2) as occupancy_percentage,
+    round(a.total_net_revenue, 2) as total_net_revenue,
     case
         when a.occupied_rooms = 0 then 0
         else cast(round(a.total_net_revenue / a.occupied_rooms) as bigint)
-    end                                                                  as adr
-from aggregated a
-left join capacity c using (hotel_id)
+    end as adr
+from aggregated as a
+left join capacity as c using (hotel_id)

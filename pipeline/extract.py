@@ -2,7 +2,7 @@
 
 Design choice (ELT, not ETL): we land the data essentially untouched. Every
 field is read as text and the nested ``stay_dates`` array is preserved as a
-LIST of STRUCTs. No validation, casting, or business logic happens here — that
+LIST of STRUCTs. No validation, casting, or business logic happens here; that
 is the transform layer's job (dbt models). This keeps extraction dumb and
 replayable, and means the raw landing table is a faithful copy of the source.
 """
@@ -75,9 +75,7 @@ def load_raw(json_path: str | Path, duckdb_path: str | Path) -> int:
             """,
             [str(json_path)],
         )
-        (row_count,) = con.execute(
-            "SELECT count(*) FROM raw.raw_reservations;"
-        ).fetchone()
+        (row_count,) = con.execute("SELECT count(*) FROM raw.raw_reservations;").fetchone()
     finally:
         con.close()
 
