@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: int_reservations_deduped
+    description: >
+      One row per reservation: the latest valid snapshot (greatest updated_at)
+      per (hotel_id, reservation_id). The deduplication step the brief flags as
+      the most common mistake.
+    columns:
+      - name: reservation_id
+        data_tests:
+          - not_null
+      - name: hotel_id
+        data_tests:
+          - not_null
+      - name: status
+        description: Current status from the latest snapshot.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [confirmed, cancelled, checked_in, checked_out]
+      - name: counts_for_occupancy
+        description: True for every status except cancelled.
+        data_tests:
+          - not_null
+
+  - name: int_reservation_nights
+    description: >
+      One row per (hotel_id, reservation_id, night) after line-item validation,
+      night explosion, and the inventory filter.
+    columns:
+      - name: night
+        data_tests:
+          - not_null
+      - name: hotel_id
+        data_tests:
+          - not_null
+      - name: status
+        data_tests:
+          - accepted_values:
+              values: [confirmed, cancelled, checked_in, checked_out]
+      - name: room_type_id
+        description: Always present in the hotel inventory (enforced by the filter).
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('stg_hotel_inventory')
+              field: room_type_id
+
+  - name: int_hotel_capacity
+    description: Total sellable rooms per hotel (the occupancy denominator).
+    columns:
+      - name: hotel_id
+        data_tests:
+          - not_null
+          - unique
+      - name: total_rooms
+        data_tests:
+          - not_null

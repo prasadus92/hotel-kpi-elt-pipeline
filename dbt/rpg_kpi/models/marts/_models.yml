@@ -9,14 +9,16 @@ models:
     columns:
       - name: hotel_id
         description: Hotel identifier.
-        data_tests: [not_null]
+        data_tests:
+          - not_null
       - name: night
         description: The night of stay the KPIs describe.
-        data_tests: [not_null]
+        data_tests:
+          - not_null
       - name: occupancy_percentage
-        description: occupied_rooms / hotel capacity * 100, rounded to 2 dp (can exceed 100 on overbooking).
+        description: occupied_rooms / hotel capacity * 100, 2 dp (can exceed 100 on overbooking).
       - name: total_net_revenue
-        description: Room net + F&B net across all statuses, rounded to 2 dp.
+        description: Room net + F&B net across all statuses, 2 dp.
       - name: adr
         description: total_net_revenue / occupied_rooms, nearest integer; 0 when no rooms occupied.
 
@@ -28,4 +30,36 @@ models:
     columns:
       - name: NIGHT_OF_STAY
         description: Date (YYYY-MM-DD) the KPIs are calculated for.
-        data_tests: [not_null]
+        data_tests:
+          - not_null
+
+unit_tests:
+  - name: fct_daily_kpis_kpi_logic
+    description: >
+      Locks the core KPI rules: occupancy excludes cancelled while revenue
+      includes it, ADR is 0 when no rooms are occupied (even with revenue),
+      ADR rounds to the nearest integer, and occupancy can exceed 100 percent.
+    model: fct_daily_kpis
+    given:
+      - input: ref('int_reservation_nights')
+        rows:
+          # H1, night 1: two occupied (checked_out + confirmed) and one cancelled.
+          # Revenue includes the cancelled booking; occupancy does not.
+          - {hotel_id: H1, reservation_id: r1, night: "2026-05-01", status: checked_out, counts_for_occupancy: true,  room_type_id: LD, total_net_revenue: 100.0}
+          - {hotel_id: H1, reservation_id: r2, night: "2026-05-01", status: confirmed,   counts_for_occupancy: true,  room_type_id: LD, total_net_revenue: 50.0}
+          - {hotel_id: H1, reservation_id: r3, night: "2026-05-01", status: cancelled,    counts_for_occupancy: false, room_type_id: LD, total_net_revenue: 30.0}
+          # H1, night 2: only a cancelled booking -> revenue but zero occupancy and ADR 0.
+          - {hotel_id: H1, reservation_id: r4, night: "2026-05-02", status: cancelled,    counts_for_occupancy: false, room_type_id: LD, total_net_revenue: 40.0}
+          # H2, night 1: overbooked (3 occupied against capacity 2) -> occupancy > 100.
+          - {hotel_id: H2, reservation_id: r5, night: "2026-05-01", status: checked_in,  counts_for_occupancy: true, room_type_id: AA, total_net_revenue: 60.0}
+          - {hotel_id: H2, reservation_id: r6, night: "2026-05-01", status: checked_out, counts_for_occupancy: true, room_type_id: AA, total_net_revenue: 60.0}
+          - {hotel_id: H2, reservation_id: r7, night: "2026-05-01", status: confirmed,   counts_for_occupancy: true, room_type_id: AA, total_net_revenue: 60.0}
+      - input: ref('int_hotel_capacity')
+        rows:
+          - {hotel_id: H1, total_rooms: 10}
+          - {hotel_id: H2, total_rooms: 2}
+    expect:
+      rows:
+        - {hotel_id: H1, night: "2026-05-01", occupied_rooms: 2, total_rooms: 10, occupancy_percentage: 20.0,  total_net_revenue: 180.0, adr: 90}
+        - {hotel_id: H1, night: "2026-05-02", occupied_rooms: 0, total_rooms: 10, occupancy_percentage: 0.0,   total_net_revenue: 40.0,  adr: 0}
+        - {hotel_id: H2, night: "2026-05-01", occupied_rooms: 3, total_rooms: 2,  occupancy_percentage: 150.0, total_net_revenue: 180.0, adr: 60}
