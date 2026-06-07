@@ -211,5 +211,6 @@ rpg-data-challenge/
 DuckDB and the file-based flow are deliberate development choices. The dbt model
 layers, the ELT shape, and the contracts all port directly to a warehouse like
 Snowflake with Dagster orchestration. The migration path and scaling notes (for
-example handling millions of reservations per day) are in
+example handling millions of reservations per day, and the physical data layout:
+partitioning, clustering keys, and indexing) are in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#from-local-to-production).
