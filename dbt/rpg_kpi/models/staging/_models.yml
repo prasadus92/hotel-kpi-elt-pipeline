@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: stg_reservations
+    description: >
+      One row per raw reservation event, cast to typed columns with a
+      reservation-level validity flag. Not yet deduplicated.
+    columns:
+      - name: reservation_id
+        description: Reservation identifier (non-unique at this grain).
+        data_tests:
+          - not_null
+      - name: hotel_id
+        description: Hotel identifier.
+        data_tests:
+          - not_null
+      - name: is_valid
+        description: True when the event passes reservation-level contract validation.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              quote: false
+
+  - name: stg_hotel_inventory
+    description: >
+      Cleaned room inventory: the authoritative room types and quantities that
+      count toward KPIs for each hotel.
+    columns:
+      - name: hotel_id
+        data_tests:
+          - not_null
+      - name: room_type_id
+        data_tests:
+          - not_null
+      - name: quantity
+        data_tests:
+          - not_null

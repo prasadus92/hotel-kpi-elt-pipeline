@@ -42,8 +42,10 @@ def parse_date(s):
 
 def parse_ts(s):
     for fmt in (
-        "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S",
-        "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S",
     ):
         try:
             return dt.datetime.strptime(s, fmt)
@@ -72,12 +74,14 @@ def q0(x):
 def compute(json_path, inv_path, hotel_id, from_date, to_date):
     inventory = defaultdict(set)
     capacity = defaultdict(int)
-    for row in csv.DictReader(open(inv_path)):
-        inventory[row["hotel_id"]].add(row["room_type_id"])
-        capacity[row["hotel_id"]] += int(row["quantity"])
+    with open(inv_path) as inv_file:
+        for row in csv.DictReader(inv_file):
+            inventory[row["hotel_id"]].add(row["room_type_id"])
+            capacity[row["hotel_id"]] += int(row["quantity"])
     cap = capacity[hotel_id]
 
-    reservations = json.load(open(json_path))["data"]
+    with open(json_path) as json_file:
+        reservations = json.load(json_file)["data"]
     recs = [r for r in reservations if r.get("hotel_id") == hotel_id]
 
     # reservation-level validation
@@ -87,8 +91,17 @@ def compute(json_path, inv_path, hotel_id, from_date, to_date):
         a, d = parse_date(r.get("arrival_date")), parse_date(r.get("departure_date"))
         c, u = parse_ts(r.get("created_at") or ""), parse_ts(r.get("updated_at") or "")
         stay = r.get("stay_dates") or []
-        if (r.get("hotel_id") and r.get("reservation_id") and status in VALID_STATUS
-                and a and d and d > a and c and u and len(stay) > 0):
+        if (
+            r.get("hotel_id")
+            and r.get("reservation_id")
+            and status in VALID_STATUS
+            and a
+            and d
+            and d > a
+            and c
+            and u
+            and len(stay) > 0
+        ):
             rr = dict(r, _a=a, _d=d, _u=u, status=status)
             valid.append(rr)
 
@@ -100,8 +113,8 @@ def compute(json_path, inv_path, hotel_id, from_date, to_date):
         if k not in best or key > best[k][0]:
             best[k] = (key, r)
 
-    occ = defaultdict(set)          # night -> reservation ids occupying (non-cancelled)
-    rev = defaultdict(Decimal)      # night -> total net revenue (all statuses)
+    occ = defaultdict(set)  # night -> reservation ids occupying (non-cancelled)
+    rev = defaultdict(Decimal)  # night -> total net revenue (all statuses)
     for _, r in best.values():
         a, d, cancelled = r["_a"], r["_d"], r["status"] == "cancelled"
         per_night = {}
@@ -129,9 +142,9 @@ def compute(json_path, inv_path, hotel_id, from_date, to_date):
             total = room_net + fnb_net
             cur = s
             while cur <= e:
-                if a <= cur < d:  # occupiable nights only
-                    if cur not in per_night or (total, rt) > per_night[cur]:
-                        per_night[cur] = (total, rt)
+                # occupiable nights only, keeping one row per night deterministically
+                if a <= cur < d and (cur not in per_night or (total, rt) > per_night[cur]):
+                    per_night[cur] = (total, rt)
                 cur += dt.timedelta(days=1)
         for night, (total, _rt) in per_night.items():
             rev[night] += total
@@ -161,26 +174,30 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     expected = compute(
-        args.input, args.inventory, args.hotel_id,
-        dt.date.fromisoformat(args.from_date), dt.date.fromisoformat(args.to_date),
+        args.input,
+        args.inventory,
+        args.hotel_id,
+        dt.date.fromisoformat(args.from_date),
+        dt.date.fromisoformat(args.to_date),
     )
 
     produced = {}
     with open(args.csv) as f:
         for row in csv.DictReader(f):
             produced[row["NIGHT_OF_STAY"]] = (
-                row["OCCUPANCY_PERCENTAGE"], row["TOTAL_NET_REVENUE"], row["ADR"]
+                row["OCCUPANCY_PERCENTAGE"],
+                row["TOTAL_NET_REVENUE"],
+                row["ADR"],
             )
 
     mismatches = [
-        (d, expected[d], produced.get(d))
-        for d in expected if expected[d] != produced.get(d)
+        (d, expected[d], produced.get(d)) for d in expected if expected[d] != produced.get(d)
     ]
     print(f"rows expected: {len(expected)} | rows in CSV: {len(produced)}")
     if mismatches or len(expected) != len(produced):
         print("MISMATCHES:")
-        for m in mismatches:
-            print("  date=%s independent=%s pipeline=%s" % m)
+        for night, independent, pipeline in mismatches:
+            print(f"  date={night} independent={independent} pipeline={pipeline}")
         return 1
     print("OK: independent reimplementation matches the pipeline output on every row.")
     return 0

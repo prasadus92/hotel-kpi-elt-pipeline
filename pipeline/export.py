@@ -14,10 +14,7 @@ import duckdb
 
 def output_filename(hotel_id: str, from_date: str, to_date: str) -> str:
     """kpi_<hotel_id>_<yyyy>_<mm>_<dd>_to_<yyyy>_<mm>_<dd>.csv"""
-    return (
-        f"kpi_{hotel_id}_"
-        f"{from_date.replace('-', '_')}_to_{to_date.replace('-', '_')}.csv"
-    )
+    return f"kpi_{hotel_id}_{from_date.replace('-', '_')}_to_{to_date.replace('-', '_')}.csv"
 
 
 def write_csv(

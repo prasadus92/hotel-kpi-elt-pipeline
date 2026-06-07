@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      # Shared DuckDB file used by the EL step, dbt, and sqlfluff's dbt templater.
+      RPG_DUCKDB_PATH: ${{ github.workspace }}/dbt/rpg_kpi/rpg.duckdb
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint Python (ruff)
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Run the pipeline (EL + dbt build incl. tests + export)
+        run: python run_pipeline.py
+
+      - name: Lint SQL (sqlfluff, dbt templater)
+        run: sqlfluff lint dbt/rpg_kpi/models dbt/rpg_kpi/tests
+
+      - name: Python tests (pytest)
+        run: python -m pytest
+
+      - name: Reconcile output against an independent implementation
+        run: |
+          python scripts/cross_check.py \
+            --csv output/kpi_1035_2026_05_01_to_2026_05_31.csv \
+            --hotel-id 1035 --from-date 2026-05-01 --to-date 2026-05-31
+
+      - name: Regression check (committed CSV matches a fresh build)
+        run: git diff --exit-code -- output/kpi_1035_2026_05_01_to_2026_05_31.csv

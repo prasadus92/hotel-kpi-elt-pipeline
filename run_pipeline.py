@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RoomPriceGenie daily-KPI pipeline — CLI entrypoint.
+"""RoomPriceGenie daily-KPI pipeline CLI entrypoint.
 
 Runs the three pipeline stages end to end for a given hotel and date range:
 
@@ -23,7 +23,6 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 from pipeline import export, extract
@@ -39,9 +38,7 @@ def _valid_date(value: str) -> str:
     try:
         dt.date.fromisoformat(value)
     except ValueError as exc:  # pragma: no cover - argparse surfaces the message
-        raise argparse.ArgumentTypeError(
-            f"'{value}' is not a valid YYYY-MM-DD date"
-        ) from exc
+        raise argparse.ArgumentTypeError(f"'{value}' is not a valid YYYY-MM-DD date") from exc
     return value
 
 
@@ -52,19 +49,27 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--hotel-id", default="1035", help="Hotel to report on.")
     parser.add_argument(
-        "--from-date", default="2026-05-01", type=_valid_date,
+        "--from-date",
+        default="2026-05-01",
+        type=_valid_date,
         help="Start of the date range (inclusive), YYYY-MM-DD.",
     )
     parser.add_argument(
-        "--to-date", default="2026-05-31", type=_valid_date,
+        "--to-date",
+        default="2026-05-31",
+        type=_valid_date,
         help="End of the date range (inclusive), YYYY-MM-DD.",
     )
     parser.add_argument(
-        "--input", default=str(DEFAULT_INPUT), type=Path,
+        "--input",
+        default=str(DEFAULT_INPUT),
+        type=Path,
         help="Path to the raw reservations JSON.",
     )
     parser.add_argument(
-        "--output-dir", default=str(DEFAULT_OUTPUT_DIR), type=Path,
+        "--output-dir",
+        default=str(DEFAULT_OUTPUT_DIR),
+        type=Path,
         help="Directory to write the CSV into.",
     )
     args = parser.parse_args(argv)
@@ -83,16 +88,18 @@ def run_dbt(hotel_id: str, from_date: str, to_date: str) -> None:
             "(source .venv/bin/activate) or `pip install dbt-duckdb`."
         )
 
-    dbt_vars = json.dumps(
-        {"hotel_id": hotel_id, "from_date": from_date, "to_date": to_date}
-    )
+    dbt_vars = json.dumps({"hotel_id": hotel_id, "from_date": from_date, "to_date": to_date})
     env = {**os.environ, "RPG_DUCKDB_PATH": str(DUCKDB_PATH)}
 
     cmd = [
-        dbt_bin, "build",
-        "--project-dir", str(DBT_PROJECT_DIR),
-        "--profiles-dir", str(DBT_PROJECT_DIR),
-        "--vars", dbt_vars,
+        dbt_bin,
+        "build",
+        "--project-dir",
+        str(DBT_PROJECT_DIR),
+        "--profiles-dir",
+        str(DBT_PROJECT_DIR),
+        "--vars",
+        dbt_vars,
     ]
     print(f"$ {' '.join(cmd)}\n")
     subprocess.run(cmd, check=True, env=env)
@@ -102,8 +109,10 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     print("=" * 70)
-    print(f"RoomPriceGenie KPI pipeline | hotel={args.hotel_id} "
-          f"range={args.from_date}..{args.to_date}")
+    print(
+        f"RoomPriceGenie KPI pipeline | hotel={args.hotel_id} "
+        f"range={args.from_date}..{args.to_date}"
+    )
     print("=" * 70)
 
     # 1) EXTRACT / LOAD
