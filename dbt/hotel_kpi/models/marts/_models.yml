@@ -1,0 +1,31 @@
+version: 2
+
+models:
+  - name: fct_daily_kpis
+    description: >
+      Daily performance KPIs at the grain of one row per (hotel_id, night),
+      covering all hotels and every night with activity. Reusable fact that
+      feeds kpi_report (and any future report).
+    columns:
+      - name: hotel_id
+        description: Hotel identifier.
+        data_tests: [not_null]
+      - name: night
+        description: The night of stay the KPIs describe.
+        data_tests: [not_null]
+      - name: occupancy_percentage
+        description: occupied_rooms / hotel capacity * 100, rounded to 2 dp (can exceed 100 on overbooking).
+      - name: total_net_revenue
+        description: Room net + F&B net across all statuses, rounded to 2 dp.
+      - name: adr
+        description: total_net_revenue / occupied_rooms, nearest integer; 0 when no rooms occupied.
+
+  - name: kpi_report
+    description: >
+      The served CSV contract for one hotel and date range (dbt vars). One row
+      per night in range via a date spine, zeros where data is missing, sorted
+      by NIGHT_OF_STAY descending.
+    columns:
+      - name: NIGHT_OF_STAY
+        description: Date (YYYY-MM-DD) the KPIs are calculated for.
+        data_tests: [not_null]
