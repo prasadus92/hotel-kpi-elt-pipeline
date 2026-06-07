@@ -20,17 +20,17 @@ casted as (
     select
         hotel_id,
         reservation_id,
-        lower(trim(status))                      as status,
-        try_cast(arrival_date   as date)         as arrival_date,
-        try_cast(departure_date as date)         as departure_date,
-        try_cast(created_at     as timestamp)    as created_at,
-        try_cast(updated_at     as timestamp)    as updated_at,
+        lower(trim(status)) as status,
+        try_cast(arrival_date as date) as arrival_date,
+        try_cast(departure_date as date) as departure_date,
+        try_cast(created_at as timestamp) as created_at,
+        try_cast(updated_at as timestamp) as updated_at,
         stay_dates,
         -- raw values retained for validation / debugging
-        status                                   as status_raw,
-        arrival_date                             as arrival_date_raw,
-        departure_date                           as departure_date_raw,
-        updated_at                               as updated_at_raw
+        status as status_raw,
+        arrival_date as arrival_date_raw,
+        departure_date as departure_date_raw,
+        updated_at as updated_at_raw
     from source
 
 ),
@@ -40,12 +40,12 @@ validated as (
     select
         *,
         (
-            hotel_id       is not null
+            hotel_id is not null
             and reservation_id is not null
             -- status must be one of the four contract enum values
             and status in ('confirmed', 'cancelled', 'checked_in', 'checked_out')
             -- dates must parse and departure must be strictly after arrival
-            and arrival_date   is not null
+            and arrival_date is not null
             and departure_date is not null
             and departure_date > arrival_date
             -- timestamps required (updated_at drives dedup ordering)
