@@ -11,11 +11,12 @@ with source as (
 )
 
 select
-    cast(hotel_id     as varchar) as hotel_id,
+    cast(hotel_id as varchar) as hotel_id,
     cast(room_type_id as varchar) as room_type_id,
-    cast(quantity     as integer) as quantity
+    cast(quantity as integer) as quantity
 from source
-where hotel_id is not null
-  and room_type_id is not null
-  and quantity is not null
-  and quantity >= 0
+where
+    hotel_id is not null
+    and room_type_id is not null
+    and quantity is not null
+    and quantity >= 0

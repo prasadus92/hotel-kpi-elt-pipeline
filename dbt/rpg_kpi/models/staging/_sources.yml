@@ -16,6 +16,6 @@ sources:
           different `updated_at` values. Deduplication happens downstream.
         columns:
           - name: reservation_id
-            description: Reservation identifier (non-unique in raw — see above).
+            description: Reservation identifier (non-unique in raw, see above).
           - name: stay_dates
             description: LIST of STRUCTs, one per stay-date range (text fields).
