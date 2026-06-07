@@ -1,0 +1,21 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Landing zone populated by the EL step (pipeline/extract.py), which loads
+      the raw Odyssey PMS JSON into DuckDB as-is. Every field is kept as text so
+      that contract validation and casting happen in the transform layer (ELT).
+    schema: raw
+    tables:
+      - name: raw_reservations
+        description: >
+          One row per reservation event exactly as received from the PMS.
+          `reservation_id` is NOT unique here: the PMS emits a new row every time
+          a reservation is revised, so the same id can appear many times with
+          different `updated_at` values. Deduplication happens downstream.
+        columns:
+          - name: reservation_id
+            description: Reservation identifier (non-unique in raw — see above).
+          - name: stay_dates
+            description: LIST of STRUCTs, one per stay-date range (text fields).
