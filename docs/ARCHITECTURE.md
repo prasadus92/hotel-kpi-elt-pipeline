@@ -157,3 +157,48 @@ model layers, the ELT shape, and the contracts stay the same.
 - **Serving.** Expose the fact to the reporting and pricing teams through a
   stable, versioned contract (a published mart or a thin API) rather than CSV
   files.
+
+### Physical data layout: partitioning, clustering, and indexing
+
+Physical design is about making the warehouse read as little data as possible
+for the queries this workload actually runs (a dashboard sliced by hotel and
+date range). Each engine has a different mechanism, so the right answer is
+engine-specific.
+
+**DuckDB (local).** No manual tuning is warranted. DuckDB keeps per-row-group
+min/max zonemaps automatically, which already prune the date and hotel filters
+on a single file. There are no indexes to maintain, and at this data size a full
+scan is cheap regardless.
+
+**Snowflake (production).** Snowflake has no B-tree indexes; the equivalent
+levers are micro-partition pruning, clustering keys, and the Search Optimization
+Service.
+
+- **Micro-partitions and pruning.** Snowflake stores tables as immutable
+  micro-partitions with per-column min/max metadata. A query that filters on a
+  well-ordered column reads only the matching partitions. The aim of every choice
+  below is to make that pruning effective.
+- **Clustering key on the fact.** `fct_daily_kpis` is filtered by date range and
+  hotel, so a clustering key of `(night)` (or `(night, hotel_id)`) co-locates each
+  night's rows. Once the fact reaches billions of rows, a one-month dashboard
+  query then scans a handful of partitions instead of the whole table. This is
+  the Snowflake equivalent of "indexing for the query pattern".
+- **Incremental build aligned to the cluster key.** Make `fct_daily_kpis`
+  incremental and keyed by `night` so each run reprocesses only the affected
+  dates. Clustering by the same `night` keeps the incremental `MERGE` localized
+  and cheap, and avoids large reclustering churn.
+- **Point lookups.** For occasional high-cardinality equality lookups (for
+  example debugging a single `reservation_id`), the Search Optimization Service
+  fits better than reshaping the table, since the table is optimized for
+  date-ranged analytical scans, not point reads.
+- **Landing partitioned by load date.** Keep the raw landing table partitioned by
+  ingestion date so replays and late-arriving data touch a bounded set of
+  partitions rather than the full history.
+- **What to avoid.** Do not cluster on high-cardinality keys such as
+  `reservation_id` on the fact, and do not cluster on many columns at once.
+  Reclustering has a real cost, so cluster only on the columns the serving queries
+  filter and join on (here, `night` first, then `hotel_id`).
+
+The reasoning matters more than the specific keys: physical layout follows the
+query pattern and the cost of maintaining it, and uses each engine's real
+mechanism rather than a generic index.
