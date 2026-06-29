@@ -9,7 +9,7 @@ themselves are in [`METHODOLOGY.md`](METHODOLOGY.md).
 
 The pipeline is an **ELT** pipeline with three stages:
 
-1. **Extract / Load (Python).** Read the raw the PMS JSON and land it in
+1. **Extract / Load (Python).** Read the raw PMS JSON and land it in
    DuckDB untouched.
 2. **Transform (dbt on DuckDB).** Cast, validate, deduplicate, explode to
    nights, filter to inventory, and aggregate KPIs across layered models.

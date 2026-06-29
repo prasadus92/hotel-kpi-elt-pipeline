@@ -6,7 +6,7 @@ handled, and the assumptions behind the implementation. It is the reference for
 
 ## Inputs
 
-- `data/reservations_data.json`: reservation events from the the PMS. One
+- `data/reservations_data.json`: reservation events from the PMS. One
   object per reservation event, where a reservation represents a single room. The
   same `reservation_id` can appear many times because the PMS re-sends a full
   snapshot whenever a reservation changes.

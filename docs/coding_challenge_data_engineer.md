@@ -63,7 +63,7 @@ You have a PMS that sends us data about hotel reservations. This PMS has the fol
 - `fnb_gross_amount`: Food & beverage gross revenue (total per room type and date). String value that can be converted to float (e.g., "1", "2.00", "123.45"). **(Optional)**
 - `fnb_net_amount`: Food & beverage net revenue. String value that can be converted to float (e.g., "1", "2.00", "123.45"). **(Optional)**
 
-**Note on date grouping:** In most cases, `start_date` and `end_date` will be equal, representing a single night of stay. However, when multiple consecutive stay dates share identical data (same `room_type_id`, `room_type_name`, and revenue amounts), the the PMS may group them into a single entry where `start_date` represents the first date and `end_date` represents the last date of the range. This grouping is an optimization feature to reduce data redundancy.
+**Note on date grouping:** In most cases, `start_date` and `end_date` will be equal, representing a single night of stay. However, when multiple consecutive stay dates share identical data (same `room_type_id`, `room_type_name`, and revenue amounts), the PMS may group them into a single entry where `start_date` represents the first date and `end_date` represents the last date of the range. This grouping is an optimization feature to reduce data redundancy.
 
 ## Objective
 
@@ -159,7 +159,7 @@ Use whatever you prefer: if you use dbt, a lightweight database like DuckDB is f
 
 The following data files are provided.
 
-- **reservation_data.json**: Contains reservation data from the the PMS. This JSON file includes real reservation information from multiple hotels, structured according to the schema described in the Data Source section above.
+- **reservation_data.json**: Contains reservation data from the PMS. This JSON file includes real reservation information from multiple hotels, structured according to the schema described in the Data Source section above.
 
 - **hotel_room_inventory.csv**: Contains the room inventory for each hotel, specifying the quantity of each room type available per hotel. This file defines which room types should be considered when calculating KPIs.
   

@@ -4,7 +4,7 @@ sources:
   - name: raw
     description: >
       Landing zone populated by the EL step (pipeline/extract.py), which loads
-      the raw the PMS JSON into DuckDB as-is. Every field is kept as text so
+      the raw PMS JSON into DuckDB as-is. Every field is kept as text so
       that contract validation and casting happen in the transform layer (ELT).
     schema: raw
     tables:

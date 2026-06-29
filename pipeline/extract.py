@@ -1,4 +1,4 @@
-"""EL step: load the raw the PMS JSON into DuckDB.
+"""EL step: load the raw PMS JSON into DuckDB.
 
 Design choice (ELT, not ETL): we land the data essentially untouched. Every
 field is read as text and the nested ``stay_dates`` array is preserved as a

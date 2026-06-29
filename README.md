@@ -1,6 +1,6 @@
 # Daily Hotel Performance KPIs
 
-A small but production-shaped data pipeline that turns raw the PMS
+A small but production-shaped data pipeline that turns raw PMS
 reservation events into trustworthy daily performance KPIs (occupancy, net
 revenue, ADR) and exports them as a CSV in the agreed contract format.
 
