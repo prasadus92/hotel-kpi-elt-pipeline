@@ -113,9 +113,10 @@ def main(argv: list[str] | None = None) -> int:
     print("=" * 70)
 
     # 1) EXTRACT / LOAD
-    print("\n[1/3] Extract+Load: raw JSON -> DuckDB ...")
-    n = extract.load_raw(args.input, DUCKDB_PATH)
-    print(f"      loaded {n:,} raw reservation rows into raw.raw_reservations")
+    print("\n[1/3] Extract+Load: raw PMS sources -> DuckDB ...")
+    loaded = extract.load_all(DUCKDB_PATH, native_json=args.input)
+    for src, n in loaded.items():
+        print(f"      loaded {n:,} raw rows from PMS '{src}' into raw.raw_pms_{src}")
 
     # 2) TRANSFORM
     print("\n[2/3] Transform: dbt build (seed + models) ...")
