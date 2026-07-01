@@ -1,0 +1,109 @@
+version: 2
+
+models:
+  - name: data_freshness
+    description: >
+      Freshness of each PMS source, per source and per property. Measures load
+      lag and event lag against a fixed as-of watermark and flags SLA breaches
+      (is_stale). One row per (source_system, hotel_id); hotel_id = '__all__' is
+      the source-level rollup.
+    columns:
+      - name: source_system
+        description: Which PMS the freshness row is for.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [native, nordic, cloud]
+      - name: hotel_id
+        description: Property, or '__all__' for the source rollup.
+        data_tests:
+          - not_null
+      - name: load_lag_hours
+        description: Hours between the last load and the as-of watermark.
+        data_tests:
+          - not_null
+      - name: event_lag_hours
+        description: Hours since the newest event, floored at 0.
+        data_tests:
+          - not_null
+      - name: freshness_sla_hours
+        description: The freshness SLA the source is held to.
+        data_tests:
+          - not_null
+      - name: is_stale
+        description: True when load lag exceeds the freshness SLA.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              quote: false
+
+  - name: data_availability
+    description: >
+      Availability / completeness of the KPI data per (hotel_id, night) across
+      each property's active window. Detects missing days (no fact row) and
+      missing room-nights (capacity not covered) and reports a capped
+      availability percentage.
+    columns:
+      - name: hotel_id
+        data_tests:
+          - not_null
+      - name: night
+        data_tests:
+          - not_null
+      - name: expected_room_nights
+        description: Property capacity (the coverage denominator).
+        data_tests:
+          - not_null
+      - name: availability_pct
+        description: occupied_rooms / capacity * 100, capped at 100.
+        data_tests:
+          - not_null
+      - name: is_missing_day
+        description: True when the night has no fact row at all.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              quote: false
+
+  - name: reconciliation_report
+    description: >
+      Reconciliation of independently recomputed per-source KPI totals against
+      the unified fct_daily_kpis. One row per source plus a '__total__' row that
+      carries the unified fact totals, the differences, and the pass/fail
+      verdict (reconciled).
+    columns:
+      - name: source_system
+        description: Source, or '__total__' for the reconciliation row.
+        data_tests:
+          - not_null
+          - unique
+      - name: occupied_room_nights
+        data_tests:
+          - not_null
+      - name: total_net_revenue
+        data_tests:
+          - not_null
+
+  - name: mart_kpi_with_market
+    description: >
+      Daily KPIs blended with the external market / comp-set rate index. Left
+      joins the illustrative market signal onto fct_daily_kpis so internal KPIs
+      always survive; adds the comp index, the local-event flag, and the
+      property's rate position versus the market. One row per (hotel_id, night).
+    columns:
+      - name: hotel_id
+        data_tests:
+          - not_null
+      - name: night
+        data_tests:
+          - not_null
+      - name: comp_rate_index
+        description: Comp-set nightly rate index (100 = at the property's rate).
+      - name: has_local_event
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              quote: false

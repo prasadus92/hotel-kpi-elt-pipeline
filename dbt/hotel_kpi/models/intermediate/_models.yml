@@ -63,3 +63,39 @@ models:
       - name: total_rooms
         data_tests:
           - not_null
+
+  - name: int_source_event_watermarks
+    description: >
+      The newest event time per (source_system, hotel_id), with hotel_id =
+      '__all__' as the source rollup. The event side of freshness.
+    columns:
+      - name: source_system
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [native, nordic, cloud]
+      - name: hotel_id
+        data_tests:
+          - not_null
+      - name: max_event_at
+        data_tests:
+          - not_null
+
+  - name: int_source_kpi_control
+    description: >
+      Independent per-source recomputation of occupied room-nights and net
+      revenue from the deduped reservations, used as the control side of
+      reconciliation. One row per source_system.
+    columns:
+      - name: source_system
+        data_tests:
+          - not_null
+          - unique
+          - accepted_values:
+              values: [native, nordic, cloud]
+      - name: occupied_room_nights
+        data_tests:
+          - not_null
+      - name: total_net_revenue
+        data_tests:
+          - not_null
