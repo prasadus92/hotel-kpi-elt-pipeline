@@ -39,6 +39,7 @@ ranked as (
 )
 
 select
+    source_system,
     hotel_id,
     reservation_id,
     status,

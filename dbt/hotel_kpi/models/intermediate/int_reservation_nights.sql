@@ -45,14 +45,14 @@ casted_line_items as (
         sd.room_type_id,
         try_cast(sd.start_date as date) as sd_start,
         try_cast(sd.end_date as date) as sd_end,
-        try_cast(sd.room_revenue_gross_amount as double) as room_gross,
-        try_cast(sd.room_revenue_net_amount as double) as room_net,
-        try_cast(nullif(sd.fnb_gross_amount, '') as double) as fnb_gross,
-        try_cast(nullif(sd.fnb_net_amount, '') as double) as fnb_net,
-        sd.room_revenue_net_amount as room_net_raw,
-        sd.room_revenue_gross_amount as room_gross_raw,
-        sd.fnb_net_amount as fnb_net_raw,
-        sd.fnb_gross_amount as fnb_gross_raw
+        try_cast(sd.room_gross as double) as room_gross,
+        try_cast(sd.room_net as double) as room_net,
+        try_cast(nullif(sd.fnb_gross, '') as double) as fnb_gross,
+        try_cast(nullif(sd.fnb_net, '') as double) as fnb_net,
+        sd.room_net as room_net_raw,
+        sd.room_gross as room_gross_raw,
+        sd.fnb_net as fnb_net_raw,
+        sd.fnb_gross as fnb_gross_raw
     from line_items
 
 ),

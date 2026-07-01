@@ -3,19 +3,40 @@ version: 2
 sources:
   - name: raw
     description: >
-      Landing zone populated by the EL step (pipeline/extract.py), which loads
-      the raw PMS JSON into DuckDB as-is. Every field is kept as text so
-      that contract validation and casting happen in the transform layer (ELT).
+      Landing zone populated by the EL step (pipeline/extract.py), which lands
+      each PMS source into its own raw table as-is. Every field is kept as text
+      so that contract validation, casting, and normalization happen in the
+      transform layer (ELT). One raw table per source; a `stg_pms_*` adapter
+      model normalizes each onto the shared reservation contract.
     schema: raw
     tables:
-      - name: raw_reservations
+      - name: raw_pms_native
         description: >
-          One row per reservation event exactly as received from the PMS.
-          `reservation_id` is NOT unique here: the PMS emits a new row every time
-          a reservation is revised, so the same id can appear many times with
-          different `updated_at` values. Deduplication happens downstream.
+          Source A (native PMS). One row per reservation event, nested
+          stay_dates. `reservation_id` is NOT unique here: the PMS emits a new
+          row every time a reservation is revised. Dedup happens downstream.
         columns:
           - name: reservation_id
-            description: Reservation identifier (non-unique in raw, see above).
+            description: Reservation identifier (non-unique in raw).
           - name: stay_dates
             description: LIST of STRUCTs, one per stay-date range (text fields).
+      - name: raw_pms_nordic
+        description: >
+          Source B (Nordic PMS). Flat CSV: one row per room-night, DD.MM.YYYY
+          dates, gross-inclusive EUR with a VAT column, short status codes
+          (OK/OUT/CXL/NOSHOW). Already exploded to nights.
+        columns:
+          - name: booking_ref
+            description: Nordic booking reference (maps to reservation_id).
+          - name: stay_night
+            description: A single occupied night (DD.MM.YYYY).
+      - name: raw_pms_cloud
+        description: >
+          Source C (cloud PMS). Nested JSON, camelCase keys, ISO-8601 timestamps
+          with timezone offsets, USD, rate plans and discounts. Revision
+          snapshots re-emit the whole object, like the native source.
+        columns:
+          - name: confirmationId
+            description: Cloud confirmation id (maps to reservation_id).
+          - name: nightlyRates
+            description: LIST of STRUCTs, one per stay night (text fields).

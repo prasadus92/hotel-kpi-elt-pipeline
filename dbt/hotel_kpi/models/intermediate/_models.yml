@@ -5,7 +5,7 @@ models:
     description: >
       One row per reservation: the latest valid snapshot (greatest updated_at)
       per (hotel_id, reservation_id). The deduplication step that is most
-      commonly gotten wrong.
+      commonly gotten wrong. Unioned across every PMS source.
     columns:
       - name: reservation_id
         data_tests:
@@ -13,6 +13,12 @@ models:
       - name: hotel_id
         data_tests:
           - not_null
+      - name: source_system
+        description: Which PMS the reservation came from.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [native, nordic, cloud]
       - name: status
         description: Current status from the latest snapshot.
         data_tests:

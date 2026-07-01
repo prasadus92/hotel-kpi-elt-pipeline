@@ -1,62 +1,34 @@
--- Staging: one row per RAW reservation event.
+-- Staging: the unified reservation feed across every PMS source.
 --
--- Responsibilities:
---   * Cast the text landing fields to typed columns (schema-on-read -> typed).
---   * Apply RESERVATION-LEVEL contract validation and expose `is_valid` so the
---     intermediate layer can keep only "valid" events before deduplicating.
+-- Each source is normalized by its own adapter (stg_pms_native, stg_pms_nordic,
+-- stg_pms_cloud) onto one shared contract: typed reservation-level columns, a
+-- `stay_dates` LIST(STRUCT(...)) of text line items using shared field names,
+-- and a reservation-level `is_valid` flag. This model simply unions them, so
+-- every downstream model (dedup, night explosion, KPIs) is source-agnostic.
 --
--- We do NOT touch stay_dates here beyond carrying the list forward; stay-date
--- (line-item) validation happens in int_reservation_nights after dedup, so that
--- "the last valid one" is decided on the reservation grain first.
+-- Adding a PMS is therefore a tidy, local change: write one stg_pms_<name>
+-- adapter that emits these columns, then add it to the union below. Nothing
+-- downstream changes.
 
-with source as (
+with unioned as (
 
-    select * from {{ source('raw', 'raw_reservations') }}
-
-),
-
-casted as (
-
-    select
-        hotel_id,
-        reservation_id,
-        lower(trim(status)) as status,
-        try_cast(arrival_date as date) as arrival_date,
-        try_cast(departure_date as date) as departure_date,
-        try_cast(created_at as timestamp) as created_at,
-        try_cast(updated_at as timestamp) as updated_at,
-        stay_dates,
-        -- raw values retained for validation / debugging
-        status as status_raw,
-        arrival_date as arrival_date_raw,
-        departure_date as departure_date_raw,
-        updated_at as updated_at_raw
-    from source
-
-),
-
-validated as (
-
-    select
-        *,
-        (
-            hotel_id is not null
-            and reservation_id is not null
-            -- status must be one of the four contract enum values
-            and status in ('confirmed', 'cancelled', 'checked_in', 'checked_out')
-            -- dates must parse and departure must be strictly after arrival
-            and arrival_date is not null
-            and departure_date is not null
-            and departure_date > arrival_date
-            -- timestamps required (updated_at drives dedup ordering)
-            and created_at is not null
-            and updated_at is not null
-            -- a reservation must carry at least one stay-date line item
-            and stay_dates is not null
-            and len(stay_dates) > 0
-        ) as is_valid
-    from casted
+    select * from {{ ref('stg_pms_native') }}
+    union all by name
+    select * from {{ ref('stg_pms_nordic') }}
+    union all by name
+    select * from {{ ref('stg_pms_cloud') }}
 
 )
 
-select * from validated
+select
+    source_system,
+    hotel_id,
+    reservation_id,
+    status,
+    arrival_date,
+    departure_date,
+    created_at,
+    updated_at,
+    stay_dates,
+    is_valid
+from unioned

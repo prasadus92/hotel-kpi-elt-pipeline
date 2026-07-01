@@ -1,9 +1,56 @@
 version: 2
 
 models:
+  - name: stg_pms_native
+    description: >
+      Adapter for source A (native PMS): casts the nested JSON feed onto the
+      shared reservation contract (typed columns, a stay_dates line-item list,
+      and a reservation-level validity flag).
+    columns:
+      - name: source_system
+        data_tests:
+          - accepted_values:
+              values: [native]
+      - name: is_valid
+        data_tests:
+          - not_null
+
+  - name: stg_pms_nordic
+    description: >
+      Adapter for source B (Nordic PMS): parses DD.MM.YYYY dates, maps the
+      OK/OUT/CXL/NOSHOW status codes onto the contract statuses, derives net
+      from gross+VAT, and regroups the flat room-night rows into reservations.
+    columns:
+      - name: source_system
+        data_tests:
+          - accepted_values:
+              values: [nordic]
+      - name: status
+        description: Mapped onto the four contract statuses.
+        data_tests:
+          - accepted_values:
+              values: [confirmed, cancelled, checked_in, checked_out]
+
+  - name: stg_pms_cloud
+    description: >
+      Adapter for source C (cloud PMS): renames camelCase keys, maps the status
+      vocabulary, parses tz-aware ISO-8601 timestamps, and rebuilds nightlyRates
+      onto the shared line-item struct.
+    columns:
+      - name: source_system
+        data_tests:
+          - accepted_values:
+              values: [cloud]
+      - name: status
+        description: Mapped onto the four contract statuses.
+        data_tests:
+          - accepted_values:
+              values: [confirmed, cancelled, checked_in, checked_out]
+
   - name: stg_reservations
     description: >
-      One row per raw reservation event, cast to typed columns with a
+      The unified reservation feed: the union of every stg_pms_* adapter. One
+      row per raw reservation event on the shared contract, with a
       reservation-level validity flag. Not yet deduplicated.
     columns:
       - name: reservation_id
@@ -14,6 +61,12 @@ models:
         description: Hotel identifier.
         data_tests:
           - not_null
+      - name: source_system
+        description: Which PMS the reservation came from.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [native, nordic, cloud]
       - name: is_valid
         description: True when the event passes reservation-level contract validation.
         data_tests:
