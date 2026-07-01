@@ -16,6 +16,10 @@ vars:
   hotel_id: "1035"
   from_date: "2026-05-01"
   to_date: "2026-05-31"
+  # Fixed "as-of" watermark for data-quality models. Freshness lag is measured
+  # against this instant rather than wall-clock now(), so every build is
+  # deterministic and reproducible. Matches AS_OF_WATERMARK in the generator.
+  as_of_watermark: "2026-06-01 06:00:00"
 
 models:
   hotel_kpi:
@@ -33,3 +37,14 @@ seeds:
         hotel_id: varchar
         room_type_id: varchar
         quantity: integer
+    source_load_manifest:
+      +column_types:
+        source_system: varchar
+        loaded_at: timestamp
+        freshness_sla_hours: integer
+    market_rate_index:
+      +column_types:
+        hotel_id: varchar
+        night: date
+        comp_rate_index: integer
+        local_event: varchar
