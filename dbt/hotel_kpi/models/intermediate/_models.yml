@@ -4,8 +4,8 @@ models:
   - name: int_reservations_deduped
     description: >
       One row per reservation: the latest valid snapshot (greatest updated_at)
-      per (hotel_id, reservation_id). The deduplication step the brief flags as
-      the most common mistake.
+      per (hotel_id, reservation_id). The deduplication step that is most
+      commonly gotten wrong.
     columns:
       - name: reservation_id
         data_tests:

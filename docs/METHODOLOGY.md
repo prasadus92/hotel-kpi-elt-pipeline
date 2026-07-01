@@ -29,12 +29,12 @@ descending. Every night in range is present, with zeros where there is no data.
 ## Processing order
 
 The order of operations is the most important part of the methodology. Two of
-these steps are where the challenge is commonly failed.
+these steps are where the pipeline is commonly gotten wrong.
 
 1. **Reservation-level validation.** Discard whole reservation events that
    violate the contract (see Validation below).
 2. **Deduplication.** For each `reservation_id`, keep only the latest valid
-   snapshot (greatest `updated_at`). This is "the last valid one" from the brief.
+   snapshot (greatest `updated_at`). This is "the last valid one" per the KPI spec.
 3. **Explode to nights.** Expand each stay-date range into individual nights.
 4. **Line-item validation and inventory filter.** Discard individual stay-date
    entries that violate the contract, and keep only room types present in the
@@ -93,7 +93,7 @@ directly from the two rules above.
 
 ### The cancelled-status asymmetry
 
-The brief draws a deliberate distinction: occupancy uses "any status except
+The KPI spec draws a deliberate distinction: occupancy uses "any status except
 cancelled", while revenue uses "any status". This is implemented literally.
 
 The asymmetry is material, not a corner case. For hotel 1035 in May 2026,
@@ -131,7 +131,7 @@ Only reservations for room types present in `hotel_room_inventory.csv` for the
 hotel count toward any KPI. Room types that no longer exist, or that the owner
 excludes, are ignored.
 
-### What the rules catch in the provided data (hotel 1035)
+### What the rules catch in the sample data (hotel 1035)
 
 | Issue                                       | Count            | Action                  |
 | ------------------------------------------- | ---------------- | ----------------------- |
@@ -181,5 +181,5 @@ because there are no occupied rooms to divide by.
   `departure_date - 1`.
 - Grouped stay-date ranges carry per-night revenue amounts.
 - Capacity is the sum of inventory quantities for the hotel.
-- All reservations for all hotels arrive in a single request, per the brief's
+- All reservations for all hotels arrive in a single request, per the API
   stated simplification.

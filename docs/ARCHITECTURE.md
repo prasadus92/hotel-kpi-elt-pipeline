@@ -113,7 +113,7 @@ at the set level, and does not scale to a warehouse as cleanly.
 ### dbt + DuckDB
 
 DuckDB is a zero-setup, in-process analytical engine, ideal for a local,
-reproducible challenge. dbt adds layered, documented, and testable models with
+reproducible pipeline. dbt adds layered, documented, and testable models with
 lineage. The two together give a project whose structure maps one-to-one onto a
 production warehouse. DuckDB here is a development choice, not a production
 recommendation (see below).

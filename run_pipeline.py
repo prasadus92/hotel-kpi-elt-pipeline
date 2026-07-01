@@ -109,10 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     print("=" * 70)
-    print(
-        f"hotel KPI pipeline | hotel={args.hotel_id} "
-        f"range={args.from_date}..{args.to_date}"
-    )
+    print(f"hotel KPI pipeline | hotel={args.hotel_id} range={args.from_date}..{args.to_date}")
     print("=" * 70)
 
     # 1) EXTRACT / LOAD

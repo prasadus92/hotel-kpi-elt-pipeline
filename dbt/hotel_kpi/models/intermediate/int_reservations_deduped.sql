@@ -1,6 +1,5 @@
 -- Intermediate: collapse reservation event history to ONE current row per
--- reservation.  ***This is the step the brief and the interviewer call out as
--- the most common mistake.***
+-- reservation.  ***This is the step most commonly gotten wrong.***
 --
 -- The PMS re-sends a full snapshot of a reservation every time it changes, so
 -- the raw feed contains many rows per reservation_id (up to 17 in this dataset).

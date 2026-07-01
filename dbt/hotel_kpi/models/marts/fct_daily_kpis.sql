@@ -14,7 +14,7 @@
 --
 -- Note the deliberate asymmetry: cancelled reservations are EXCLUDED from
 -- occupancy/ADR's room count but INCLUDED in revenue. This is taken verbatim
--- from the brief (occupancy = "any status except cancelled"; revenue = "any
+-- from the KPI spec (occupancy = "any status except cancelled"; revenue = "any
 -- status"). A consequence: a night with only cancelled bookings shows revenue
 -- but ADR = 0 (no occupied rooms to divide by).
 

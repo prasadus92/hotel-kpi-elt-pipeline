@@ -131,7 +131,7 @@ requested range:
 | `TOTAL_NET_REVENUE`    | `room_net + fnb_net`, 2 dp                                                  |
 | `ADR`                  | `total_net_revenue / occupied_rooms`, nearest integer; `0` if no rooms occupied |
 
-Two rules decide whether this challenge is right or wrong. Both are covered by
+Two rules decide whether the KPIs come out right or wrong. Both are covered by
 [dbt unit tests](dbt/hotel_kpi/models) and the reconciliation script:
 
 1. **Deduplicate before you aggregate.** The PMS re-sends a full snapshot every
@@ -141,7 +141,7 @@ Two rules decide whether this challenge is right or wrong. Both are covered by
    this happens *before* exploding nights or summing money.
 2. **Occupancy and revenue use different status rules, by design.** Occupancy
    counts every status except `cancelled`; revenue includes every status,
-   including `cancelled`. This asymmetry is taken verbatim from the brief. In the
+   including `cancelled`. This asymmetry follows the KPI spec. In the
    May 2026 output, `2026-05-26` shows revenue of `1908.36` at `0.00` occupancy
    with `ADR = 0`: a night whose only bookings were cancelled.
 
@@ -153,7 +153,7 @@ nights `[arrival, departure - 1]`, two-grain validation) are documented in
 
 ## Quality, tests and CI
 
-The brief lists tests and CI as out of scope. They are included here, kept
+Tests and CI were optional for the original scope. They are included here, kept
 deliberately lean, to show how the work is actually built and kept trustworthy.
 
 - **dbt tests**: schema tests (`not_null`, `accepted_values`, uniqueness on the
@@ -192,12 +192,11 @@ hotel-kpi-elt-pipeline/
 │       └── marts/               # fct_daily_kpis, kpi_report (+ tests)
 ├── scripts/cross_check.py       # independent KPI reconciliation
 ├── tests/                       # pytest suite for the Python layer
-├── data/                        # provided inputs (committed for reproducibility)
+├── data/                        # sample inputs (committed for reproducibility)
 ├── output/                      # generated CSV deliverable
 ├── docs/
 │   ├── ARCHITECTURE.md          # components, data flow, decisions, production
-│   ├── METHODOLOGY.md           # exact KPI rules, validation, worked examples
-│   └── coding_challenge_data_engineer.md   # the original brief
+│   └── METHODOLOGY.md           # exact KPI rules, validation, worked examples
 ├── .github/workflows/ci.yml     # continuous integration
 ├── Makefile
 ├── pyproject.toml               # ruff + pytest config
