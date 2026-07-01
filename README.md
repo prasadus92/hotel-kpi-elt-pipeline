@@ -16,8 +16,10 @@ through a per-source adapter layer. See
 
 > **New to this repo?** Start here, then read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 > for the design, [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) for the exact
-> KPI rules and worked examples, and [`docs/PMS_SOURCES.md`](docs/PMS_SOURCES.md)
-> for the multi-source scenarios and the adapter pattern.
+> KPI rules and worked examples, [`docs/PMS_SOURCES.md`](docs/PMS_SOURCES.md)
+> for the multi-source scenarios and the adapter pattern, and
+> [`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md) for the freshness, availability,
+> reconciliation, and market-blend signals.
 
 ---
 
@@ -182,6 +184,29 @@ nights `[arrival, departure - 1]`, two-grain validation) are documented in
 
 ---
 
+## Data-quality signals
+
+Alongside the KPI fact sit the signals a revenue-management data team checks
+before trusting a number: is the data recent, is it all there, and does it add
+up. These models read from the KPI fact and never change the published
+`kpi_report` output. Full detail (and a flow diagram) is in
+[`docs/DATA_QUALITY.md`](docs/DATA_QUALITY.md).
+
+| Model                    | Grain                    | What it answers                                                                  |
+| ------------------------ | ------------------------ | -------------------------------------------------------------------------------- |
+| `data_freshness`         | `(source_system, hotel_id)` | Load lag and event lag per source vs a freshness SLA; flags stale sources (`is_stale`) |
+| `data_availability`      | `(hotel_id, night)`      | Missing days, missing room-nights, and an availability percentage against capacity |
+| `reconciliation_report`  | `source_system` (+ total) | Independently recomputed source totals vs the unified fact, with a pass/fail verdict |
+| `mart_kpi_with_market`   | `(hotel_id, night)`      | KPIs blended with an illustrative external comp-set rate index and local-events flag |
+
+Freshness is measured against a fixed as-of watermark (not wall-clock `now()`),
+so the whole build stays deterministic. Two synthetic reference feeds back these
+models: `source_load_manifest.csv` (per-source load times and SLAs, one source
+deliberately left stale) and `market_rate_index.csv` (a generic comp-set index).
+Both are deterministic outputs of `make gen-data`.
+
+---
+
 ## Quality, tests and CI
 
 Tests and CI were optional for the original scope. They are included here, kept
@@ -190,7 +215,8 @@ deliberately lean, to show how the work is actually built and kept trustworthy.
 - **dbt tests**: schema tests (`not_null`, `accepted_values`, uniqueness on the
   fact grain, relationships to inventory), singular tests for business
   invariants (no negative occupancy, ADR is 0 exactly when no rooms are
-  occupied), and **dbt unit tests** that assert the dedup and KPI logic against
+  occupied, the freshness SLA flag, availability bounds, and the reconciliation
+  gate), and **dbt unit tests** that assert the dedup and KPI logic against
   small mocked inputs.
 - **pytest** for the Python layer (validation helpers, rounding, filename
   convention, CLI argument handling) in `tests/`.
@@ -215,23 +241,26 @@ hotel-kpi-elt-pipeline/
 ├── dbt/hotel_kpi/
 │   ├── dbt_project.yml
 │   ├── profiles.yml             # local DuckDB profile
-│   ├── seeds/hotel_room_inventory.csv
+│   ├── seeds/                   # inventory, source load manifest, market rate index
 │   ├── macros/                  # reservation_validity (shared adapter check)
 │   ├── tests/                   # singular (business-invariant) tests
 │   └── models/
-│       ├── staging/             # stg_pms_* adapters, stg_reservations (union), inventory
-│       ├── intermediate/        # dedup, nights, capacity (+ unit tests)
-│       └── marts/               # fct_daily_kpis, kpi_report (+ tests)
+│       ├── staging/             # stg_pms_* adapters, stg_reservations (union), inventory, manifest, market
+│       ├── intermediate/        # dedup, nights, capacity, event watermarks, source control (+ unit tests)
+│       └── marts/
+│           ├── fct_daily_kpis, kpi_report (+ tests)
+│           └── data_quality/    # freshness, availability, reconciliation, market blend
 ├── scripts/
 │   ├── cross_check.py           # independent KPI reconciliation (per source)
-│   └── generate_synthetic.py    # deterministic Nordic + cloud data generator
+│   └── generate_synthetic.py    # deterministic synthetic data generator (PMS feeds, manifest, market)
 ├── tests/                       # pytest suite for the Python layer
 ├── data/                        # sample inputs (committed for reproducibility)
 ├── output/                      # generated CSV deliverables
 ├── docs/
 │   ├── ARCHITECTURE.md          # components, data flow, decisions, production
 │   ├── METHODOLOGY.md           # exact KPI rules, validation, worked examples
-│   └── PMS_SOURCES.md           # multi-source scenarios and the adapter pattern
+│   ├── PMS_SOURCES.md           # multi-source scenarios and the adapter pattern
+│   └── DATA_QUALITY.md          # freshness, availability, reconciliation, market blend
 ├── .github/workflows/ci.yml     # continuous integration
 ├── Makefile
 ├── pyproject.toml               # ruff + pytest config
