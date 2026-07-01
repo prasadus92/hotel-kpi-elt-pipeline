@@ -1,0 +1,4 @@
+source_system,loaded_at,freshness_sla_hours
+native,2026-06-01 03:00:00,24
+nordic,2026-05-31 20:00:00,24
+cloud,2026-05-31 00:00:00,24

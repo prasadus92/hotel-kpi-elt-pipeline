@@ -120,6 +120,20 @@ This separation keeps the fact reusable (it can feed many reports or a BI tool),
 keeps request-specific shaping out of the core model, and makes re-running a
 single report cheap.
 
+## Data-quality layer
+
+Alongside the KPI marts sits a data-quality layer under
+`models/marts/data_quality/` that answers the questions a revenue-management data
+team asks before trusting a number: is the data recent (`data_freshness`), is it
+all there (`data_availability`), does it add up (`reconciliation_report`), and how
+did the property do against the market (`mart_kpi_with_market`). These models read
+from `fct_daily_kpis` and the deduped reservations; they never change the served
+`kpi_report`. Two small reference feeds back them, seeded from the deterministic
+generator: `source_load_manifest` (per-source load times and freshness SLAs) and
+`market_rate_index` (an illustrative external comp-set signal). Freshness is
+measured against a fixed as-of watermark (the `as_of_watermark` var) so the build
+stays deterministic. Full detail is in [`DATA_QUALITY.md`](DATA_QUALITY.md).
+
 ## Key design decisions
 
 ### ELT, not ETL

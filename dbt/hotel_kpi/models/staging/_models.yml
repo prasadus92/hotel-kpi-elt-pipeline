@@ -89,3 +89,42 @@ models:
       - name: quantity
         data_tests:
           - not_null
+
+  - name: stg_source_load_manifest
+    description: >
+      The source load manifest (freshness, load side): one row per PMS source
+      with the timestamp of its latest batch load and its freshness SLA in hours.
+    columns:
+      - name: source_system
+        data_tests:
+          - not_null
+          - unique
+          - accepted_values:
+              values: [native, nordic, cloud]
+      - name: loaded_at
+        data_tests:
+          - not_null
+      - name: freshness_sla_hours
+        data_tests:
+          - not_null
+
+  - name: stg_market_rate_index
+    description: >
+      The external market / comp-set rate index (illustrative): one row per
+      (hotel_id, night) with a nightly comp rate index and a local-event flag.
+    columns:
+      - name: hotel_id
+        data_tests:
+          - not_null
+      - name: night
+        data_tests:
+          - not_null
+      - name: comp_rate_index
+        data_tests:
+          - not_null
+      - name: has_local_event
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              quote: false
