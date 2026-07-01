@@ -34,6 +34,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
+SEEDS_DIR = REPO_ROOT / "dbt" / "hotel_kpi" / "seeds"
 
 # One fixed seed for the whole run keeps both files deterministic.
 SEED = 20260501
@@ -71,6 +72,36 @@ CLOUD_RATE_PLANS = {
     "BAR": Decimal("0.00"),  # best available rate, no discount
     "ADV": Decimal("0.15"),  # advance purchase, 15% off
     "CORP": Decimal("0.20"),  # negotiated corporate rate
+}
+
+# --- Data-quality signals (freshness / availability / market) --------------
+# A data team judges freshness relative to a fixed "as-of" watermark rather than
+# wall-clock now(), so the whole repo stays deterministic and re-runnable. This
+# is the moment the warehouse is considered current for every load.
+AS_OF_WATERMARK = "2026-06-01T06:00:00"
+
+# Each PMS source lands on its own cadence. The manifest records, per source,
+# when its latest batch was loaded (loaded_at) and, deliberately, one source is
+# left stale so the freshness SLA test has something to catch.
+#   loaded_at is expressed as an offset (in hours) BEFORE the as-of watermark.
+SOURCE_LOAD_MANIFEST = {
+    # source_system: (loaded_at_hours_before_watermark, sla_hours)
+    "native": (3, 24),  # fresh: loaded 3h ago against a 24h SLA
+    "nordic": (10, 24),  # fresh: loaded 10h ago against a 24h SLA
+    "cloud": (30, 24),  # STALE: last load 30h ago, past the 24h SLA
+}
+
+# A generic external "market/comp" signal: a nightly rate index for the local
+# comp set (100 = the property's own typical rate) plus a local-events flag.
+# It is intentionally illustrative and carries no real market data. One row per
+# (hotel_id, night); values follow a fixed weekly and events-driven shape.
+MARKET_EVENTS = {
+    # night -> event label that lifts the comp-set rate index
+    "2026-05-14": "city_conference",
+    "2026-05-15": "city_conference",
+    "2026-05-23": "long_weekend",
+    "2026-05-24": "long_weekend",
+    "2026-05-25": "long_weekend",
 }
 
 
@@ -312,6 +343,81 @@ def write_cloud(reservations: list[dict], path: Path) -> None:
         fh.write("\n")
 
 
+# ---------------------------------------------------------------------------
+# Source load manifest (freshness input)
+# ---------------------------------------------------------------------------
+def generate_load_manifest() -> list[dict]:
+    """One row per PMS source: when its latest batch loaded, and its SLA.
+
+    This is the load-side half of freshness. The event-side half (how recent the
+    newest *event* in each feed is) is derived in dbt from the feeds themselves.
+    `loaded_at` is computed as an offset before the fixed as-of watermark so the
+    file never depends on wall-clock time and CI can diff it byte-for-byte.
+    """
+    watermark = dt.datetime.fromisoformat(AS_OF_WATERMARK)
+    rows = []
+    for source, (hours_before, sla_hours) in SOURCE_LOAD_MANIFEST.items():
+        loaded_at = watermark - dt.timedelta(hours=hours_before)
+        rows.append(
+            {
+                "source_system": source,
+                "loaded_at": loaded_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "freshness_sla_hours": str(sla_hours),
+            }
+        )
+    return rows
+
+
+def write_load_manifest(rows: list[dict], path: Path) -> None:
+    fields = ["source_system", "loaded_at", "freshness_sla_hours"]
+    with path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+# ---------------------------------------------------------------------------
+# Market / comp rate index (external market dimension)
+# ---------------------------------------------------------------------------
+def generate_market_index() -> list[dict]:
+    """A generic nightly comp-set rate index + local-events flag per property.
+
+    Illustrative only: 100 means the comp set is priced at the property's own
+    typical rate, above 100 means the market is more expensive that night. The
+    shape is a fixed weekly pattern (weekends firmer) with events layered on top.
+    One row per (hotel_id, night) across May 2026 for every property.
+    """
+    hotels = ["1035", "2050", "3120", "3121"]
+    rows = []
+    start = dt.date(2026, 5, 1)
+    for hotel in hotels:
+        for offset in range(31):  # May 2026, inclusive
+            night = start + dt.timedelta(days=offset)
+            key = night.isoformat()
+            # Weekly base: firmer on Fri/Sat (weekday 4,5).
+            base = 105 if night.weekday() in (4, 5) else 98
+            event = MARKET_EVENTS.get(key, "")
+            lift = 20 if event else 0
+            rows.append(
+                {
+                    "hotel_id": hotel,
+                    "night": key,
+                    "comp_rate_index": str(base + lift),
+                    "local_event": event,
+                }
+            )
+    rows.sort(key=lambda r: (r["hotel_id"], r["night"]))
+    return rows
+
+
+def write_market_index(rows: list[dict], path: Path) -> None:
+    fields = ["hotel_id", "night", "comp_rate_index", "local_event"]
+    with path.open("w", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main() -> int:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -322,6 +428,19 @@ def main() -> int:
     cloud_res = generate_cloud(random.Random(SEED + 1))
     write_cloud(cloud_res, DATA_DIR / "pms_cloud_reservations.json")
     print(f"wrote data/pms_cloud_reservations.json ({len(cloud_res)} reservation snapshots)")
+
+    # The manifest and market index are dbt seeds (reference/dimension data), so
+    # they are written straight into the seeds directory. A copy also lands in
+    # data/ so every synthetic feed is discoverable in one place.
+    manifest_rows = generate_load_manifest()
+    write_load_manifest(manifest_rows, DATA_DIR / "source_load_manifest.csv")
+    write_load_manifest(manifest_rows, SEEDS_DIR / "source_load_manifest.csv")
+    print(f"wrote source_load_manifest.csv ({len(manifest_rows)} source load rows)")
+
+    market_rows = generate_market_index()
+    write_market_index(market_rows, DATA_DIR / "market_rate_index.csv")
+    write_market_index(market_rows, SEEDS_DIR / "market_rate_index.csv")
+    print(f"wrote market_rate_index.csv ({len(market_rows)} market-night rows)")
     return 0
 
 
