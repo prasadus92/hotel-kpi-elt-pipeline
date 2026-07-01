@@ -71,17 +71,121 @@ def q0(x):
     return int(Decimal(x).quantize(Decimal("1"), ROUND_HALF_UP))
 
 
-def compute(json_path, inv_path, hotel_id, from_date, to_date):
+def _load_inventory(inv_path):
     inventory = defaultdict(set)
     capacity = defaultdict(int)
     with open(inv_path) as inv_file:
         for row in csv.DictReader(inv_file):
             inventory[row["hotel_id"]].add(row["room_type_id"])
             capacity[row["hotel_id"]] += int(row["quantity"])
+    return inventory, capacity
+
+
+def load_native(json_path):
+    """Native PMS: reservations are already in the internal shape."""
+    with open(json_path) as json_file:
+        return json.load(json_file)["data"]
+
+
+def load_nordic(csv_path):
+    """Nordic PMS -> internal reservation shape (mirrors stg_pms_nordic).
+
+    Flat CSV, one row per room-night: parse DD.MM.YYYY, map the status codes,
+    back VAT out of the gross prices, and regroup nights into one reservation
+    each with a stay_dates list using the internal field names.
+    """
+    status_map = {
+        "ok": "checked_in",
+        "out": "checked_out",
+        "cxl": "cancelled",
+        "noshow": "confirmed",
+    }
+    by_ref = {}
+    with open(csv_path) as fh:
+        for row in csv.DictReader(fh):
+            ref = row["booking_ref"]
+            checkin = dt.datetime.strptime(row["checkin"], "%d.%m.%Y").date()
+            checkout = dt.datetime.strptime(row["checkout"], "%d.%m.%Y").date()
+            night = dt.datetime.strptime(row["stay_night"], "%d.%m.%Y").date()
+            gross = to_decimal(row["room_gross_eur"])
+            vat = to_decimal(row["room_vat_eur"])
+            board_gross = to_decimal(row["board_gross_eur"])
+            net = gross - vat
+            board_net = q2(board_gross / Decimal("1.10"))
+            rec = by_ref.setdefault(
+                ref,
+                {
+                    "hotel_id": row["property_code"],
+                    "reservation_id": ref,
+                    "status": status_map.get(
+                        row["stay_status"].strip().lower(), row["stay_status"]
+                    ),
+                    "arrival_date": checkin.isoformat(),
+                    "departure_date": checkout.isoformat(),
+                    "created_at": checkin.isoformat() + " 00:00:00",
+                    "updated_at": checkin.isoformat() + " 00:00:00",
+                    "stay_dates": [],
+                },
+            )
+            rec["stay_dates"].append(
+                {
+                    "start_date": night.isoformat(),
+                    "end_date": night.isoformat(),
+                    "room_type_id": row["room_code"],
+                    "room_revenue_gross_amount": f"{gross:.2f}",
+                    "room_revenue_net_amount": f"{net:.2f}",
+                    "fnb_gross_amount": f"{board_gross:.2f}",
+                    "fnb_net_amount": f"{board_net:.2f}",
+                }
+            )
+    return list(by_ref.values())
+
+
+def load_cloud(json_path):
+    """Cloud PMS -> internal reservation shape (mirrors stg_pms_cloud)."""
+    status_map = {
+        "checkedout": "checked_out",
+        "checkedin": "checked_in",
+        "confirmed": "confirmed",
+        "cancelled": "cancelled",
+    }
+    with open(json_path) as fh:
+        raw = json.load(fh)["reservations"]
+    out = []
+    for r in raw:
+        out.append(
+            {
+                "hotel_id": r["propertyId"],
+                "reservation_id": r["confirmationId"],
+                "status": status_map.get(r["reservationStatus"].lower(), r["reservationStatus"]),
+                "arrival_date": r["arrival"],
+                "departure_date": r["departure"],
+                # Drop the tz offset: only per-reservation ordering matters.
+                "created_at": r["createdAt"][:19].replace("T", " "),
+                "updated_at": r["modifiedAt"][:19].replace("T", " "),
+                "stay_dates": [
+                    {
+                        "start_date": sd["stayDate"],
+                        "end_date": sd["stayDate"],
+                        "room_type_id": sd["roomCode"],
+                        "room_revenue_gross_amount": sd["roomChargeGross"],
+                        "room_revenue_net_amount": sd["roomChargeNet"],
+                        "fnb_gross_amount": sd["incidentalsGross"],
+                        "fnb_net_amount": sd["incidentalsNet"],
+                    }
+                    for sd in r["nightlyRates"]
+                ],
+            }
+        )
+    return out
+
+
+def compute(json_path, inv_path, hotel_id, from_date, to_date, reservations=None):
+    inventory, capacity = _load_inventory(inv_path)
     cap = capacity[hotel_id]
 
-    with open(json_path) as json_file:
-        reservations = json.load(json_file)["data"]
+    if reservations is None:
+        reservations = load_native(json_path)
     recs = [r for r in reservations if r.get("hotel_id") == hotel_id]
 
     # reservation-level validation
@@ -163,22 +267,44 @@ def compute(json_path, inv_path, hotel_id, from_date, to_date):
     return expected
 
 
+SOURCE_DEFAULTS = {
+    "native": REPO_ROOT / "data" / "reservations_data.json",
+    "nordic": REPO_ROOT / "data" / "pms_nordic_stays.csv",
+    "cloud": REPO_ROOT / "data" / "pms_cloud_reservations.json",
+}
+SOURCE_LOADERS = {"native": load_native, "nordic": load_nordic, "cloud": load_cloud}
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--csv", required=True, type=Path)
     p.add_argument("--hotel-id", default="1035")
     p.add_argument("--from-date", default="2026-05-01")
     p.add_argument("--to-date", default="2026-05-31")
-    p.add_argument("--input", default=str(REPO_ROOT / "data" / "reservations_data.json"))
+    p.add_argument(
+        "--source",
+        choices=list(SOURCE_LOADERS),
+        default="native",
+        help="Which PMS source the CSV was built from (picks the normalizer).",
+    )
+    p.add_argument(
+        "--input",
+        default=None,
+        help="Path to the raw source file (defaults per --source).",
+    )
     p.add_argument("--inventory", default=str(REPO_ROOT / "data" / "hotel_room_inventory.csv"))
     args = p.parse_args(argv)
 
+    input_path = Path(args.input) if args.input else SOURCE_DEFAULTS[args.source]
+    reservations = SOURCE_LOADERS[args.source](input_path)
+
     expected = compute(
-        args.input,
+        input_path,
         args.inventory,
         args.hotel_id,
         dt.date.fromisoformat(args.from_date),
         dt.date.fromisoformat(args.to_date),
+        reservations=reservations,
     )
 
     produced = {}

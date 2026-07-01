@@ -141,3 +141,74 @@ def test_compute_applies_all_core_rules(tmp_path):
     assert result["2026-05-02"] == ("25.00", "110.00", "110")
     # 2026-05-03: checkout day, no occupied night -> zero-filled by the spine.
     assert result["2026-05-03"] == ("0.00", "0.00", "0")
+
+
+# --- per-source normalizers (mirror the stg_pms_* adapters) -------------------
+
+
+def test_load_nordic_normalizes_to_internal_shape(tmp_path):
+    csv_path = tmp_path / "nordic.csv"
+    csv_path.write_text(
+        "property_code,booking_ref,stay_status,checkin,checkout,stay_night,"
+        "room_code,currency,room_gross_eur,room_vat_eur,board_gross_eur\n"
+        # two nights of one booking -> one reservation, two stay_dates
+        "2050,NB1,OUT,01.05.2026,03.05.2026,01.05.2026,STD,EUR,110.00,10.00,11.00\n"
+        "2050,NB1,OUT,01.05.2026,03.05.2026,02.05.2026,STD,EUR,110.00,10.00,11.00\n"
+        # a cancellation, its own reservation
+        "2050,NB2,CXL,05.05.2026,06.05.2026,05.05.2026,SUP,EUR,190.00,17.27,22.80\n"
+    )
+    recs = cross_check.load_nordic(csv_path)
+    by_id = {r["reservation_id"]: r for r in recs}
+
+    nb1 = by_id["NB1"]
+    assert nb1["hotel_id"] == "2050"
+    assert nb1["status"] == "checked_out"  # OUT -> checked_out
+    assert nb1["arrival_date"] == "2026-05-01"
+    assert nb1["departure_date"] == "2026-05-03"
+    assert len(nb1["stay_dates"]) == 2
+    # net = gross - vat = 110 - 10 = 100
+    assert nb1["stay_dates"][0]["room_revenue_net_amount"] == "100.00"
+
+    assert by_id["NB2"]["status"] == "cancelled"  # CXL -> cancelled
+
+
+def test_load_cloud_normalizes_camelcase_and_status(tmp_path):
+    json_path = tmp_path / "cloud.json"
+    json_path.write_text(
+        json.dumps(
+            {
+                "reservations": [
+                    {
+                        "propertyId": "3120",
+                        "confirmationId": "9",
+                        "reservationStatus": "checkedOut",
+                        "arrival": "2026-05-01",
+                        "departure": "2026-05-02",
+                        "createdAt": "2026-04-01T09:00:00-05:00",
+                        "modifiedAt": "2026-04-02T09:00:00-05:00",
+                        "ratePlanCode": "ADV",
+                        "nightlyRates": [
+                            {
+                                "roomCode": "K1",
+                                "stayDate": "2026-05-01",
+                                "ratePlan": "ADV",
+                                "roomChargeGross": "200.00",
+                                "roomChargeNet": "178.50",
+                                "incidentalsGross": "20.00",
+                                "incidentalsNet": "17.85",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    recs = cross_check.load_cloud(json_path)
+    assert len(recs) == 1
+    r = recs[0]
+    assert r["hotel_id"] == "3120"
+    assert r["reservation_id"] == "9"
+    assert r["status"] == "checked_out"  # checkedOut -> checked_out
+    assert r["updated_at"] == "2026-04-02 09:00:00"  # tz offset dropped
+    assert r["stay_dates"][0]["room_type_id"] == "K1"
+    assert r["stay_dates"][0]["room_revenue_net_amount"] == "178.50"
