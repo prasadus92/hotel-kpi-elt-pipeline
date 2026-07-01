@@ -31,7 +31,12 @@ jobs:
           ruff check .
           ruff format --check .
 
-      - name: Run the pipeline (EL + dbt build incl. tests + export)
+      - name: Synthetic data is deterministic (regenerate, expect no diff)
+        run: |
+          python scripts/generate_synthetic.py
+          git diff --exit-code -- data/pms_nordic_stays.csv data/pms_cloud_reservations.json
+
+      - name: Run the pipeline (EL of all PMS sources + dbt build incl. tests + export)
         run: python run_pipeline.py
 
       - name: Lint SQL (sqlfluff, dbt templater)
@@ -40,11 +45,27 @@ jobs:
       - name: Python tests (pytest)
         run: python -m pytest
 
-      - name: Reconcile output against an independent implementation
+      - name: Reconcile the native source (hotel 1035) against an independent impl
         run: |
           python scripts/cross_check.py \
             --csv output/kpi_1035_2026_05_01_to_2026_05_31.csv \
-            --hotel-id 1035 --from-date 2026-05-01 --to-date 2026-05-31
+            --source native --hotel-id 1035 --from-date 2026-05-01 --to-date 2026-05-31
+
+      - name: Build + reconcile the Nordic source (property 2050)
+        run: |
+          python run_pipeline.py --hotel-id 2050 --from-date 2026-05-01 --to-date 2026-05-31
+          python scripts/cross_check.py \
+            --csv output/kpi_2050_2026_05_01_to_2026_05_31.csv \
+            --source nordic --hotel-id 2050 --from-date 2026-05-01 --to-date 2026-05-31
+
+      - name: Build + reconcile the cloud source (properties 3120 and 3121)
+        run: |
+          for hotel in 3120 3121; do
+            python run_pipeline.py --hotel-id "$hotel" --from-date 2026-05-01 --to-date 2026-05-31
+            python scripts/cross_check.py \
+              --csv "output/kpi_${hotel}_2026_05_01_to_2026_05_31.csv" \
+              --source cloud --hotel-id "$hotel" --from-date 2026-05-01 --to-date 2026-05-31
+          done
 
       - name: Regression check (committed CSV matches a fresh build)
         run: git diff --exit-code -- output/kpi_1035_2026_05_01_to_2026_05_31.csv

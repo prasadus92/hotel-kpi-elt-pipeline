@@ -9,12 +9,19 @@ themselves are in [`METHODOLOGY.md`](METHODOLOGY.md).
 
 The pipeline is an **ELT** pipeline with three stages:
 
-1. **Extract / Load (Python).** Read the raw PMS JSON and land it in
-   DuckDB untouched.
-2. **Transform (dbt on DuckDB).** Cast, validate, deduplicate, explode to
-   nights, filter to inventory, and aggregate KPIs across layered models.
+1. **Extract / Load (Python).** Land each raw PMS source into its own DuckDB
+   table, untouched.
+2. **Transform (dbt on DuckDB).** Normalize each source onto a shared contract
+   (per-source adapters), union them, then cast, validate, deduplicate, explode
+   to nights, filter to inventory, and aggregate KPIs across layered models.
 3. **Serve / Export (Python).** Copy the final serving model to a CSV named per
    the contract.
+
+The pipeline ingests three PMS sources with different shapes and normalizes them
+through an adapter layer. The multi-source design (schema differences, the
+adapter pattern, per-source examples) is documented in
+[`PMS_SOURCES.md`](PMS_SOURCES.md); this document covers the shared pipeline
+below.
 
 A single Python entrypoint (`run_pipeline.py`) runs the three stages in order
 and forwards the request parameters (`hotel_id`, `from_date`, `to_date`) to dbt
@@ -24,13 +31,22 @@ as variables.
 
 ```mermaid
 flowchart TD
-    J["reservations_data.json<br/>(raw PMS events)"]
+    J["native JSON"]
+    N["Nordic CSV"]
+    C["cloud JSON"]
     I["hotel_room_inventory.csv"]
 
-    J -->|"extract.load_raw()"| RAW[("DuckDB<br/>raw.raw_reservations<br/>(all VARCHAR, nested)")]
-    I -->|"dbt seed"| SEED[("DuckDB<br/>hotel_room_inventory")]
+    J -->|"extract.load_all()"| RA[("raw.raw_pms_native")]
+    N -->|"extract.load_all()"| RB[("raw.raw_pms_nordic")]
+    C -->|"extract.load_all()"| RC[("raw.raw_pms_cloud")]
+    I -->|"dbt seed"| SEED[("hotel_room_inventory")]
 
-    RAW --> S1["stg_reservations<br/>cast + reservation-level validity flag"]
+    RA --> A1["stg_pms_native"]
+    RB --> A2["stg_pms_nordic"]
+    RC --> A3["stg_pms_cloud"]
+    A1 --> S1["stg_reservations<br/>union on the shared contract + validity flag"]
+    A2 --> S1
+    A3 --> S1
     SEED --> S2["stg_hotel_inventory<br/>clean inventory"]
 
     S1 --> D1["int_reservations_deduped<br/>keep latest valid snapshot per reservation"]
@@ -47,12 +63,14 @@ flowchart TD
 
 ### Stage 1: Extract / Load (`pipeline/extract.py`)
 
-- Reads the JSON with DuckDB's `read_json`, declaring an explicit **all-`VARCHAR`
-  schema** (including the nested `stay_dates` array of structs).
-- Lands the result as-is into `raw.raw_reservations`, one row per raw reservation
-  event, with `stay_dates` preserved as a native `LIST(STRUCT(...))`.
+- Lands each PMS source into its own raw table with DuckDB's `read_json` /
+  `read_csv`, declaring an explicit **all-`VARCHAR` schema** (including nested
+  arrays of structs). `load_all()` reads whichever sources are present.
+- Each raw table (`raw.raw_pms_native`, `raw.raw_pms_nordic`,
+  `raw.raw_pms_cloud`) is one row per raw record, nested arrays preserved as
+  native `LIST(STRUCT(...))`.
 - No validation, casting, or business logic happens here. This is a faithful,
-  replayable copy of the source. Reading everything as text is a deliberate
+  replayable copy of each source. Reading everything as text is a deliberate
   schema-on-read choice so that malformed values are detected and discarded by
   the transform layer rather than silently coerced or rejected by the reader.
 
@@ -62,7 +80,10 @@ dbt models, materialized in DuckDB, organised in three layers.
 
 | Layer        | Model                       | Materialization | Responsibility                                                              |
 | ------------ | --------------------------- | --------------- | -------------------------------------------------------------------------- |
-| staging      | `stg_reservations`          | view            | Cast text to typed columns; flag reservation-level contract validity        |
+| staging      | `stg_pms_native`            | view            | Adapter: normalize the native PMS feed onto the shared contract             |
+| staging      | `stg_pms_nordic`            | view            | Adapter: normalize the Nordic PMS feed onto the shared contract             |
+| staging      | `stg_pms_cloud`             | view            | Adapter: normalize the cloud PMS feed onto the shared contract              |
+| staging      | `stg_reservations`          | view            | Union the adapters; flag reservation-level contract validity                |
 | staging      | `stg_hotel_inventory`       | view            | Clean the inventory seed (authoritative room types and capacity)            |
 | intermediate | `int_reservations_deduped`  | view            | Keep only valid events, then the latest snapshot per reservation            |
 | intermediate | `int_reservation_nights`    | view            | Explode stay-dates to nights, line-item validation, inventory filter        |

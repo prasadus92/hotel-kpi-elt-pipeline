@@ -6,10 +6,17 @@ handled, and the assumptions behind the implementation. It is the reference for
 
 ## Inputs
 
-- `data/reservations_data.json`: reservation events from the PMS. One
-  object per reservation event, where a reservation represents a single room. The
-  same `reservation_id` can appear many times because the PMS re-sends a full
-  snapshot whenever a reservation changes.
+- Three PMS sources, each in its own shape. Every source is normalized onto one
+  shared reservation contract by a per-source adapter before any KPI logic runs,
+  so the rules below apply identically regardless of source. The sources, their
+  schema differences, and the adapter pattern are documented in
+  [`PMS_SOURCES.md`](PMS_SOURCES.md).
+  - `data/reservations_data.json` (native PMS): one object per reservation event,
+    where a reservation represents a single room. The same `reservation_id` can
+    appear many times because the PMS re-sends a full snapshot whenever a
+    reservation changes.
+  - `data/pms_nordic_stays.csv` (Nordic PMS): a flat, pre-exploded CSV.
+  - `data/pms_cloud_reservations.json` (cloud PMS): nested camelCase JSON.
 - `data/hotel_room_inventory.csv`: the room types and quantities that count for
   each hotel. This is the authoritative list of room types and the source of each
   hotel's capacity.

@@ -10,7 +10,7 @@ FROM_DATE ?= 2026-05-01
 TO_DATE   ?= 2026-05-31
 CSV       ?= output/kpi_$(HOTEL)_$(subst -,_,$(FROM_DATE))_to_$(subst -,_,$(TO_DATE)).csv
 
-.PHONY: help install run test lint format dbt-test pytest reconcile check clean
+.PHONY: help install run run-all gen-data test lint format dbt-test pytest reconcile check clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -23,6 +23,14 @@ install: ## Create venv and install runtime + dev dependencies
 
 run: ## Run the pipeline (override HOTEL/FROM_DATE/TO_DATE as needed)
 	$(PY) run_pipeline.py --hotel-id $(HOTEL) --from-date $(FROM_DATE) --to-date $(TO_DATE)
+
+gen-data: ## Regenerate the synthetic Nordic + cloud datasets (deterministic)
+	$(PY) scripts/generate_synthetic.py
+
+run-all: ## Build a report for one property per PMS source (native, Nordic, cloud)
+	$(PY) run_pipeline.py --hotel-id 1035 --from-date $(FROM_DATE) --to-date $(TO_DATE)
+	$(PY) run_pipeline.py --hotel-id 2050 --from-date $(FROM_DATE) --to-date $(TO_DATE)
+	$(PY) run_pipeline.py --hotel-id 3120 --from-date $(FROM_DATE) --to-date $(TO_DATE)
 
 lint: ## Lint Python (ruff) and SQL (sqlfluff)
 	$(VENV)/bin/ruff check .

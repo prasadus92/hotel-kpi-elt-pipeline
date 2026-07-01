@@ -5,12 +5,19 @@ reservation events into trustworthy daily performance KPIs (occupancy, net
 revenue, ADR) and exports them as a CSV in the agreed contract format.
 
 It is built as an **ELT pipeline**: a thin Python Extract/Load step lands the
-raw JSON in **DuckDB**, **dbt** runs the Transform across layered models, and a
+raw feeds in **DuckDB**, **dbt** runs the Transform across layered models, and a
 thin Python serve step exports the final CSV.
 
+It ingests **three different PMS sources** that each arrive in their own shape
+(nested JSON, flat CSV, camelCase JSON with different dates, currencies, status
+codes, and room taxonomies) and normalizes all of them onto one KPI model
+through a per-source adapter layer. See
+[`docs/PMS_SOURCES.md`](docs/PMS_SOURCES.md).
+
 > **New to this repo?** Start here, then read [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-> for the design and [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) for the exact
-> KPI rules and worked examples.
+> for the design, [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) for the exact
+> KPI rules and worked examples, and [`docs/PMS_SOURCES.md`](docs/PMS_SOURCES.md)
+> for the multi-source scenarios and the adapter pattern.
 
 ---
 
@@ -64,6 +71,23 @@ python run_pipeline.py \
 # -> output/kpi_1036_2026_04_01_to_2026_04_30.csv
 ```
 
+The same command works for every PMS source. Each run lands all three sources,
+builds the unified model, and exports the requested property:
+
+```bash
+python run_pipeline.py --hotel-id 2050 --from-date 2026-05-01 --to-date 2026-05-31  # Nordic PMS
+python run_pipeline.py --hotel-id 3120 --from-date 2026-05-01 --to-date 2026-05-31  # cloud PMS
+```
+
+| Property | PMS source | Notable traits |
+| -------- | ---------- | -------------- |
+| `1035`, `1036` | Native (nested JSON) | Snapshot revisions, cancelled-revenue asymmetry |
+| `2050` | Nordic (flat CSV) | `DD.MM.YYYY`, gross EUR + VAT, no-shows |
+| `3120`, `3121` | Cloud (camelCase JSON) | ISO-8601 tz, USD, rate plans, overbooking |
+
+See [`docs/PMS_SOURCES.md`](docs/PMS_SOURCES.md) for the schema differences and
+the adapter/normalization pattern.
+
 | Argument        | Default                       | Meaning                                  |
 | --------------- | ----------------------------- | ---------------------------------------- |
 | `--hotel-id`    | `1035`                        | Hotel to report on                       |
@@ -92,12 +116,19 @@ Three stages, with a clear separation between *moving* data (Python) and
 
 ```mermaid
 flowchart LR
-    A["reservations_data.json"] -->|"EL: pipeline/extract.py"| B[("DuckDB: raw")]
-    S["hotel_room_inventory.csv"] -->|"dbt seed"| C[("DuckDB: seed")]
+    A["native JSON"] -->|"EL"| RA[("raw.raw_pms_native")]
+    B["Nordic CSV"] -->|"EL"| RB[("raw.raw_pms_nordic")]
+    C["cloud JSON"] -->|"EL"| RC[("raw.raw_pms_cloud")]
+    S["hotel_room_inventory.csv"] -->|"dbt seed"| SD[("DuckDB: seed")]
 
     subgraph dbt["Transform: dbt models on DuckDB"]
-        B --> ST1["stg_reservations"]
-        C --> ST2["stg_hotel_inventory"]
+        RA --> AA["stg_pms_native"]
+        RB --> AB["stg_pms_nordic"]
+        RC --> AC["stg_pms_cloud"]
+        AA --> ST1["stg_reservations (union)"]
+        AB --> ST1
+        AC --> ST1
+        SD --> ST2["stg_hotel_inventory"]
         ST1 --> IN1["int_reservations_deduped"]
         IN1 --> IN2["int_reservation_nights"]
         ST2 --> IN2
@@ -112,8 +143,8 @@ flowchart LR
 
 | Stage           | Code                  | Responsibility                                           |
 | --------------- | --------------------- | ------------------------------------------------------- |
-| Extract / Load  | `pipeline/extract.py` | Read PMS JSON as text (schema-on-read) and land it raw  |
-| Transform       | `dbt/hotel_kpi/`        | Cast, validate, deduplicate, explode, filter, aggregate |
+| Extract / Load  | `pipeline/extract.py` | Land each PMS source as text (schema-on-read) into its own raw table |
+| Transform       | `dbt/hotel_kpi/`        | Normalize per source, union, deduplicate, explode, filter, aggregate |
 | Serve / Export  | `pipeline/export.py`  | Copy the `kpi_report` mart to a contract-named CSV       |
 | Orchestration   | `run_pipeline.py`     | Run the three stages and forward CLI args to dbt        |
 
@@ -179,24 +210,28 @@ Run the same checks locally with `make check`.
 hotel-kpi-elt-pipeline/
 ├── run_pipeline.py              # CLI: EL -> dbt -> export
 ├── pipeline/
-│   ├── extract.py               # EL: raw JSON -> DuckDB (schema-on-read)
+│   ├── extract.py               # EL: land each PMS source -> DuckDB (schema-on-read)
 │   └── export.py                # serve: kpi_report -> contract CSV
 ├── dbt/hotel_kpi/
 │   ├── dbt_project.yml
 │   ├── profiles.yml             # local DuckDB profile
 │   ├── seeds/hotel_room_inventory.csv
+│   ├── macros/                  # reservation_validity (shared adapter check)
 │   ├── tests/                   # singular (business-invariant) tests
 │   └── models/
-│       ├── staging/             # stg_reservations, stg_hotel_inventory (+ tests)
+│       ├── staging/             # stg_pms_* adapters, stg_reservations (union), inventory
 │       ├── intermediate/        # dedup, nights, capacity (+ unit tests)
 │       └── marts/               # fct_daily_kpis, kpi_report (+ tests)
-├── scripts/cross_check.py       # independent KPI reconciliation
+├── scripts/
+│   ├── cross_check.py           # independent KPI reconciliation (per source)
+│   └── generate_synthetic.py    # deterministic Nordic + cloud data generator
 ├── tests/                       # pytest suite for the Python layer
 ├── data/                        # sample inputs (committed for reproducibility)
-├── output/                      # generated CSV deliverable
+├── output/                      # generated CSV deliverables
 ├── docs/
 │   ├── ARCHITECTURE.md          # components, data flow, decisions, production
-│   └── METHODOLOGY.md           # exact KPI rules, validation, worked examples
+│   ├── METHODOLOGY.md           # exact KPI rules, validation, worked examples
+│   └── PMS_SOURCES.md           # multi-source scenarios and the adapter pattern
 ├── .github/workflows/ci.yml     # continuous integration
 ├── Makefile
 ├── pyproject.toml               # ruff + pytest config
