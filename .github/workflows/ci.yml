@@ -34,7 +34,11 @@ jobs:
       - name: Synthetic data is deterministic (regenerate, expect no diff)
         run: |
           python scripts/generate_synthetic.py
-          git diff --exit-code -- data/pms_nordic_stays.csv data/pms_cloud_reservations.json
+          git diff --exit-code -- \
+            data/pms_nordic_stays.csv data/pms_cloud_reservations.json \
+            data/source_load_manifest.csv data/market_rate_index.csv \
+            dbt/hotel_kpi/seeds/source_load_manifest.csv \
+            dbt/hotel_kpi/seeds/market_rate_index.csv
 
       - name: Run the pipeline (EL of all PMS sources + dbt build incl. tests + export)
         run: python run_pipeline.py
